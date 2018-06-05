@@ -1,13 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"path/filepath"
 	"log"
+	"io/ioutil"
+	"path/filepath"
 	"strings"
+	"os"
 	"zipcsv/zipcsv"
+	"zipcsv/config"
+	"zipcsv/summarizer"
 )
 
 /*
@@ -21,9 +24,37 @@ UID носителя,
 количество оставшихся поездок по билету (если будет проставлено в системе)
  */
 
-func main() {
-	result := make(map[string]int64)
 
+func tryStdInAsDataInput(cfg config.Config) summarizer.Storage {
+	var summarizerStorage summarizer.Storage
+
+	file := os.Stdin
+	fi, err := file.Stat()
+	checkError(err, "Error on file.Stat()")
+
+	if size := fi.Size(); size > 0 {
+		fmt.Printf("%v bytes available in Stdin\n", size)
+
+		scanner := bufio.NewScanner(os.Stdin)
+
+		scanner.Scan()
+		columnsTitles := strings.Split(scanner.Text(), ";")
+		checkError(scanner.Err(), "Error on reading standard input")
+
+		summarizerStorage = summarizer.New( cfg, columnsTitles )
+
+
+		for scanner.Scan() {
+			fmt.Println(scanner.Text()) // Println will add back the final '\n'
+			processRow(scanner.Text(), &summarizerStorage)
+		}
+		checkError(scanner.Err(), "Error on reading standard input")
+	}
+
+	return summarizerStorage
+}
+
+func tryFilesAsDataInput(cfg config.Config) summarizer.Storage {
 	dir := getCurrentDir()
 	files := listFilesOfDir(dir)
 
@@ -35,41 +66,79 @@ func main() {
 	}
 
 	rows, errs := zipcsv.ProcessFiles(files)
-
-	loop:
-	for {
-		select {
-		case row, ok := <- rows:
-			if !ok {
-				break loop
-			}
-			processRow(row, result)
-		case err, ok := <- errs:
-			if !ok {
-				break loop
-			}
-			fmt.Println(err)
-		}
+	header, ok := <-rows
+	if !ok {
+		fmt.Println("File is empty")
 	}
 
-	for key, val := range result {
-		fmt.Printf("%s => %d\n", key, val)
+	fmt.Println(header);
+	headerColumns := strings.Split(header, ";")
+
+	fmt.Println("Если в первой строке колонки, то они следующие:\n", headerColumns)
+
+	summarizerStorage := summarizer.New( cfg, headerColumns )
+	i := 0
+	loop:
+		for {
+			select {
+				case row, ok := <-rows:
+				if i == 0 {
+					fmt.Println(row)
+				}
+				if !ok {
+					break loop
+				}
+				processRow(row, &summarizerStorage)
+			case err, ok := <-errs:
+				if !ok {
+					break loop
+				}
+				fmt.Println(err)
+			}
+			i++
+		}
+
+		log.Printf( "%+v", summarizerStorage)
+
+	return summarizerStorage
+}
+
+func checkError(err error, errMsg string) {
+	if err != nil {
+		fmt.Fprintln(os.Stderr, errMsg+":%+v", err)
+		os.Exit(3)
 	}
 }
 
-func processRow(row string, result map[string]int64) {
-	data := strings.Split(row, ";")
-	if len(data) < 1 || len(data[0]) < 13 {
+func main() {
+	cfg := config.New()
+	if summary := tryStdInAsDataInput(cfg); summary == 0 {
+		fmt.Println("Stdin is empty. File reader will be tried...")
+	}
+	tryFilesAsDataInput(cfg)
+
+
+
+	/*for key, val := range result {
+		fmt.Printf("%s => %d\n", key, val)
+	}*/
+}
+
+func processRow(row string, summarizerStorage *summarizer.Storage) {
+	columnToValue := strings.Split(row, ";")
+
+	if len(columnToValue) < 1 {
+		log.Printf("Row «%+v» contain no columns! So row will be skipped.", row)
+		return
+	}
+	if len(columnToValue[0]) < 13 {
+		log.Printf("First column value «%+v» lower then 13. So row will be skipped.", columnToValue)
 		return
 	}
 
-	key := data[0][11:13]
-
-	if _, ok := result[key]; !ok {
-		result[key] = 0
+	for columnIndex, columnValue := range columnToValue {
+		(*summarizerStorage)[columnIndex].AddValue( columnValue )
 	}
-
-	result[key]++
 }
 
 func getCurrentDir() string {
@@ -93,7 +162,7 @@ func listFilesOfDir(dir string) []string {
 		if file.IsDir() || !zipcsv.IsZIP(file.Name()) {
 			continue
 		}
-		result = append(result, dir + string(os.PathSeparator) + file.Name())
+		result = append(result, dir+string(os.PathSeparator)+file.Name())
 	}
 
 	return result

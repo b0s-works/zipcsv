@@ -1,0 +1,8 @@
+{
+  "aggregation": {
+    "firstColumnName": "sum",
+    "thirdColumnName": "avg",
+    "secondColumnName": "group",
+    "fourthColumnName": "countUniq"
+  }
+}
