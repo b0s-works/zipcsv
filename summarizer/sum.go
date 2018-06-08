@@ -2,7 +2,6 @@ package summarizer
 
 import (
 	"strconv"
-	"fmt"
 )
 
 type sum struct {
@@ -17,6 +16,7 @@ func (s sum) AddValue(stringValue string) error {
 	s.result += d
 	return nil
 }
+
 func (s sum) Result() string {
-	return fmt.Sprintf("%d", s.result)
+	return strconv.FormatInt(s.result, 10)
 }

@@ -3,7 +3,6 @@ package summarizer
 import (
 	"log"
 	"strconv"
-	"fmt"
 )
 
 type avg struct {
@@ -21,6 +20,7 @@ func (a avg) AddValue(stringValue string) error {
 	a.result += d
 	return nil
 }
+
 func (a avg) Result() string {
-	return fmt.Sprintf("%d", a.result/a.count)
+	return strconv.FormatInt(a.result/a.count, 10)
 }

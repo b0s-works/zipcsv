@@ -1,6 +1,8 @@
 package summarizer
 
-import "fmt"
+import (
+	"strconv"
+)
 
 type countUnique struct {
 	unique map[string]bool
@@ -11,6 +13,7 @@ func (cU countUnique) AddValue(stringValue string) error {
 
 	return nil
 }
+
 func (cU countUnique) Result() string {
-	return fmt.Sprintf("%d", len(cU.unique))
+	return strconv.Itoa(len(cU.unique))
 }

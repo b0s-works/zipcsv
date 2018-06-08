@@ -1,14 +1,35 @@
 package summarizer
 
 import (
-	"zipcsv/config"
-	"os"
 	"fmt"
+	"log"
+	"os"
+	"strings"
+	"zipcsv/config"
 )
 
-type Storage map[int]ValueSaver
+type Result map[int]DataProcessor
 
-func (s Storage) buildResults() string {
+func (s Result) ProcessRow(row string) {
+	columnToValue := strings.Split(row, ";")
+
+	if len(columnToValue) < 1 {
+		log.Printf("Row «%+v» contain no columns! So row will be skipped.", row)
+		return
+	}
+	if len(columnToValue[0]) < 13 {
+		log.Printf("First column value «%+v» lower then 13. So row will be skipped.", columnToValue)
+		return
+	}
+
+	for columnIndex, columnValue := range columnToValue {
+		if s[columnIndex] != nil {
+			s[columnIndex].AddValue(columnValue)
+		}
+	}
+}
+
+func (s Result) buildResults() string {
 	var summaryString string
 	for _, columnValueInterface := range s {
 		summaryString += columnValueInterface.Result() + ";"
@@ -16,22 +37,18 @@ func (s Storage) buildResults() string {
 
 	return summaryString
 }
-func (s Storage) GetSummary() string {
+
+func (s Result) GetSummary() string {
 	return s.buildResults()
 }
 
-type ValueSaver interface {
-	AddValue(string) error
-	Result() string
-}
-
-func New(cfg config.Config, columnsTitles []string) Storage {
+func New(cfg config.Config, columnsTitles []string) Result {
 	if len(columnsTitles) == 0 {
 		fmt.Println("ColumnsTitles variable is empty. Aggregation types can't be linked when no titles used.")
 		os.Exit(0)
 	}
 
-	var summarizer = make(map[int]ValueSaver)
+	var summarizer = make(map[int]DataProcessor)
 		fmt.Printf( "ColumnTitles is «%v»\n", columnsTitles )
 
 	var successIndex int
