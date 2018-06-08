@@ -1,13 +1,24 @@
 package summarizer
 
 import (
-	"fmt"
-	"log"
-	"strconv"
 	"zipcsv/config"
+	"os"
+	"fmt"
 )
 
 type Storage map[int]ValueSaver
+
+func (s Storage) buildResults() string {
+	var summaryString string
+	for _, columnValueInterface := range s {
+		summaryString += columnValueInterface.Result() + ";"
+	}
+
+	return summaryString
+}
+func (s Storage) GetSummary() string {
+	return s.buildResults()
+}
 
 type ValueSaver interface {
 	AddValue(string) error
@@ -15,76 +26,49 @@ type ValueSaver interface {
 }
 
 func New(cfg config.Config, columnsTitles []string) Storage {
-	if len(columnsTitles) != 0 {
-		log.Fatal("ColumnsTitles variable is empty. Aggregation types can't be linked when no titles used.")
-		return nil
+	if len(columnsTitles) == 0 {
+		fmt.Println("ColumnsTitles variable is empty. Aggregation types can't be linked when no titles used.")
+		os.Exit(0)
 	}
 
-	var summarizer = make(Storage)
+	var summarizer = make(map[int]ValueSaver)
+		fmt.Printf( "ColumnTitles is «%v»\n", columnsTitles )
+
+	var successIndex int
 	for columnIndex, columnTitle := range columnsTitles {
 		aggregationType := cfg.Aggregation[columnTitle]
 
+		if aggregationType == "" {
+			//fmt.Printf( "Column «%v» have not aggregation method specified in configuration file\n", columnTitle )
+			continue
+		}
+
 		switch aggregationType {
 		case "sum":
+			fmt.Printf("Column «%+v» by «%+v» will be used for summarizing «%+v»...\n", columnTitle, columnIndex, aggregationType)
 			summarizer[columnIndex] = sum{}
+			successIndex++
 		case "avg":
+			fmt.Printf("Column «%+v» by «%+v» will be used for summarizing «%+v»...\n", columnTitle, columnIndex, aggregationType)
 			summarizer[columnIndex] = avg{}
+			successIndex++
 			//TODO ADD GROUPING
 		case "countUnique":
+			fmt.Printf("Column «%+v» by «%+v» will be used for summarizing «%+v»...\n", columnTitle, columnIndex, aggregationType)
 			summarizer[columnIndex] = countUnique{}
+			successIndex++
 		default:
-			log.Printf("Aggregation type «%v» is unknown! So column called «%v» will be skipped!", aggregationType, columnTitle)
+			fmt.Printf("Aggregation type «%v» is unknown! So column called «%v» will be skipped!\n", aggregationType, columnTitle)
 			/*os.Exit(3)*/
 		}
+	}
+
+	if successIndex == 0 {
+		fmt.Printf( "No aggregation methods can be applied. So processing not needed. Program will be terminated.\n" )
+		os.Exit(0)
 	}
 
 	return summarizer
 }
 
-type sum struct {
-	result int64
-}
-
-func (s sum) AddValue(stringValue string) error {
-	d, err := strconv.ParseInt(stringValue, 0, 64)
-	if err != nil {
-		return err
-	}
-	s.result += d
-	return nil
-}
-func (s sum) Result() string {
-	return fmt.Sprintf("%d", s.result)
-}
-
-type avg struct {
-	count  int64
-	result int64
-}
-
-func (a avg) AddValue(stringValue string) error {
-	d, err := strconv.ParseInt(stringValue, 0, 64)
-	if err != nil {
-		return err
-	}
-	a.count ++
-	a.result += d
-	return nil
-}
-func (a avg) Result() string {
-	return fmt.Sprintf("%d", a.result/a.count)
-}
-
 //TODO ADD GROUPING
-type countUnique struct {
-	unique map[string]bool
-}
-
-func (cU countUnique) AddValue(stringValue string) error {
-	cU.unique[stringValue] = true
-
-	return nil
-}
-func (cU countUnique) Result() string {
-	return fmt.Sprintf("%d", len(cU.unique))
-}
